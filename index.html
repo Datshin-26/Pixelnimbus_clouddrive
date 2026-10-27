@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="A robust, secure, and distributed cloud-based image storage and sharing system with multi-region replication and presigned secure URLs.">
+<title>PixelNimbus - Cloud-Based Image Storage and Sharing System</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">☁</div>
+    <div>
+      <h1>PixelNimbus</h1>
+      <p>Cloud Image Storage &amp; Sharing Engine</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span class="sla">SLA: <b>99.99%</b> • 24ms (us-east-1)</span>
+    <button class="btn ghost" id="openArch">Architecture</button>
+    <button class="btn primary" id="toggleUpload">Upload Image</button>
+  </div>
+</header>
+
+<main>
+  <section class="stats">
+    <div class="card stat">
+      <span class="label">Allocated Storage Quota</span>
+      <div class="value"><span id="usedMB">0.0</span> MB / 500 MB</div>
+      <div class="bar"><div id="quotaBar"></div></div>
+    </div>
+    <div class="card stat">
+      <span class="label">Cloud Objects Stored</span>
+      <div class="value" id="objCount">0</div>
+      <small>Immutable SHA-256 verified</small>
+    </div>
+    <div class="card stat">
+      <span class="label">Active Presigned Shares</span>
+      <div class="value" id="shareCount">0</div>
+      <small>Expiring &amp; encrypted tokens</small>
+    </div>
+    <div class="card stat">
+      <span class="label">Replication Factor</span>
+      <div class="value">3x Active</div>
+      <small>Cross-region automatic sync</small>
+    </div>
+  </section>
+
+  <section class="card upload-panel hidden" id="uploadPanel">
+    <div class="panel-head">
+      <div><h2>Cloud Object Ingestion</h2><small>S3 Multi-part Emulation</small></div>
+      <button class="btn ghost" id="closeUpload">✕ Close</button>
+    </div>
+    <div class="dropzone" id="dropzone">
+      <div class="drop-icon">⬆</div>
+      <h3>Drag and drop images here or <u>browse files</u></h3>
+      <p>Supports JPG, PNG, WEBP, GIF, SVG up to 25 MB</p>
+      <input type="file" id="fileInput" accept="image/*" multiple hidden>
+    </div>
+    <div class="form-row">
+      <label>Target Primary Region
+        <select id="regionSel">
+          <option value="us-east-1">🇺🇸 us-east-1 (N. Virginia)</option>
+          <option value="eu-west-1">🇪🇺 eu-west-1 (Ireland)</option>
+          <option value="ap-south-1" selected>🇮🇳 ap-south-1 (Mumbai)</option>
+        </select>
+      </label>
+      <label>Cloud Storage Class
+        <select id="classSel">
+          <option value="STANDARD">STANDARD (Instant Access)</option>
+          <option value="INTELLIGENT TIERING">INTELLIGENT TIERING (Auto-scale)</option>
+          <option value="GLACIER">GLACIER (Low-cost Archive)</option>
+        </select>
+      </label>
+      <label>Object Tags (comma separated)
+        <input type="text" id="tagsInput" placeholder="e.g. holiday, nature, 2026">
+      </label>
+    </div>
+    <h4>Ingestion Queue &amp; Encryption Pipeline</h4>
+    <div id="queue" class="queue"></div>
+  </section>
+
+  <section class="filters">
+    <div class="chips" id="regionChips">
+      <button class="chip active" data-region="all">All Regions</button>
+      <button class="chip" data-region="ap-south-1">ap-south-1</button>
+      <button class="chip" data-region="us-east-1">us-east-1</button>
+      <button class="chip" data-region="eu-west-1">eu-west-1</button>
+    </div>
+    <select id="tagFilter"><option value="all">All Tags</option></select>
+  </section>
+
+  <section id="gallery" class="gallery"></section>
+
+  <section class="empty card" id="emptyState">
+    <div class="drop-icon">🗂</div>
+    <h3>No Cloud Objects Found</h3>
+    <p>Upload your first high-resolution image to demonstrate cloud storage, checksum verification, and multi-region replication.</p>
+    <button class="btn primary" id="emptyUpload">Upload Image Now</button>
+  </section>
+</main>
+
+<!-- Share modal -->
+<div class="modal hidden" id="shareModal"><div class="modal-box">
+  <div class="panel-head"><div><h2>Generate Presigned Share Link</h2><small>Configure time-limited, encrypted access token</small></div><button class="btn ghost close">✕</button></div>
+  <div class="share-preview"><img id="shareThumb" alt=""><div><h4 id="shareName">filename.png</h4><small id="shareMeta">1.2 MB • ap-south-1</small></div></div>
+  <label>Access Expiration
+    <select id="expSel">
+      <option value="3600000">1 Hour (High Security)</option>
+      <option value="86400000" selected>24 Hours (Standard)</option>
+      <option value="604800000">7 Days (Extended)</option>
+      <option value="0">Never (Public Persistent)</option>
+    </select>
+  </label>
+  <label>Optional Access Passcode <input type="text" id="passInput" placeholder="Leave blank for no passcode"></label>
+  <label class="check"><input type="checkbox" id="allowDl" checked> Allow recipient to download raw binary file</label>
+  <button class="btn primary full" id="genLink">Generate Secure Link</button>
+  <div id="linkResult" class="hidden">
+    <label>Generated Presigned URL</label>
+    <div class="copy-row"><input type="text" id="linkOut" readonly><button class="btn ghost" id="copyBtn">Copy</button></div>
+    <div class="qr"><div id="qrBox"></div><small>Scan QR code for direct mobile access</small></div>
+  </div>
+</div></div>
+
+<!-- Detail modal -->
+<div class="modal hidden" id="detailModal"><div class="modal-box wide">
+  <div class="panel-head"><span class="badge" id="dClass">STANDARD</span><button class="btn ghost close">✕</button></div>
+  <img id="dImg" class="detail-img" alt="">
+  <h2 id="dTitle">image_title.png</h2>
+  <small id="dDate">Uploaded -</small>
+  <dl class="meta">
+    <dt>Object ID</dt><dd id="dId">-</dd>
+    <dt>File Size</dt><dd id="dSize">-</dd>
+    <dt>MIME Type</dt><dd id="dMime">-</dd>
+    <dt>Primary Region</dt><dd id="dRegion">-</dd>
+    <dt>SHA-256 Checksum</dt><dd id="dHash" class="mono">-</dd>
+  </dl>
+  <h4>Cloud Replication Zones</h4><div id="dZones" class="chips"></div>
+  <h4>Classification Tags</h4><div id="dTags" class="chips"></div>
+  <div class="actions">
+    <button class="btn primary" id="dShare">Share</button>
+    <button class="btn ghost" id="dDownload">Download</button>
+    <button class="btn danger" id="dDelete">Delete</button>
+  </div>
+</div></div>
+
+<!-- Architecture modal -->
+<div class="modal hidden" id="archModal"><div class="modal-box wide">
+  <div class="panel-head"><div><h2>Cloud Architecture &amp; Academic Overview</h2><small>Concepts demonstrated in this Cloud Computing project</small></div><button class="btn ghost close">✕</button></div>
+  <h4>1. Cloud Object Storage Model (AWS S3 Architecture)</h4>
+  <p>Unlike hierarchical POSIX filesystems, this system stores images as unique immutable objects keyed by UUIDs. Metadata (size, MIME type, cryptographic checksum, tags) is maintained independently in an ACID-compliant metadata catalog, separating data plane from control plane.</p>
+  <h4>2. Multi-Region Replication (Active-Active Fault Tolerance)</h4>
+  <p>When an object is uploaded to a primary region (e.g., <code>ap-south-1</code>), it automatically triggers replication routines across distributed availability zones (<code>us-east-1</code>, <code>eu-west-1</code>), ensuring high availability (99.99%) and disaster recovery.</p>
+  <h4>3. Presigned URLs &amp; Zero-Trust Tokenized Access</h4>
+  <p>Implements temporary presigned authorization tokens with configurable expiration windows and optional SHA-256 password hashing. External clients can view or download assets without possessing direct database or storage credentials.</p>
+  <h4>4. Data Integrity &amp; Cryptographic Checksums</h4>
+  <p>Every payload computes a SHA-256 digest upon byte transmission to guarantee tamper resistance and bit-rot prevention in transit and at rest.</p>
+</div></div>
+
+<!-- Shared asset view -->
+<div class="modal hidden" id="sharedModal"><div class="modal-box">
+  <div class="panel-head"><div><h2>PixelNimbus Shared Asset</h2><small>Secure cloud presigned download link</small></div><button class="btn ghost close">✕</button></div>
+  <div id="lockBox" class="hidden">
+    <p>🔒 This shared object is password-protected by the owner.</p>
+    <div class="copy-row"><input type="password" id="unlockPass" placeholder="Enter passcode"><button class="btn primary" id="unlockBtn">Unlock</button></div>
+    <small id="unlockErr" class="err"></small>
+  </div>
+  <div id="sharedBody" class="hidden">
+    <img id="sImg" class="detail-img" alt="Shared Image">
+    <p><b id="sName">filename.png</b></p>
+    <small id="sSize">Size: 2.4 MB</small>
+    <div class="actions"><a class="btn primary" id="sDownload">Download Image</a></div>
+  </div>
+  <p id="sMsg" class="err"></p>
+</div></div>
+
+<div id="toast" class="toast"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
